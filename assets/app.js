@@ -195,6 +195,9 @@
 
   renderHome();
   renderEvent();
+  fetch('/api/events').then(function (r) { return r.json(); }).then(function (data) {
+    if (Array.isArray(data.events)) { window.EVENTS = data.events; renderHome(); renderEvent(); }
+  }).catch(function () {});
   logo();
   reveal();
   var y = document.getElementById('year');

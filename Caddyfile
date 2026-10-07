@@ -3,14 +3,21 @@
 root * /usr/share/caddy
 
 @admin path /admin /admin/ /admin.html
+@write {
+	path /api/*
+	method PUT POST DELETE
+}
 handle @admin {
 	basicauth {
 		{$ADMIN_LOGIN} {$ADMIN_PASSWORD_HASH}
 	}
 	rewrite * /admin.html
-	file_server
+	reverse_proxy localhost:8080
 }
-
-handle {
-	file_server
+handle @write {
+	basicauth {
+		{$ADMIN_LOGIN} {$ADMIN_PASSWORD_HASH}
+	}
+	reverse_proxy localhost:8080
 }
+handle { reverse_proxy localhost:8080 }
