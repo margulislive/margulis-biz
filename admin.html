@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Редактор событий — Margulis Business Club</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@500;600;700&family=JetBrains+Mono:wght@500&family=Onest:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  .adm { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 24px 40px; padding-top: 40px; padding-bottom: 96px; }
+  .adm__list { flex: 1 1 300px; display: flex; flex-direction: column; gap: 8px; }
+  .adm__form { flex: 999 1 520px; min-width: 0; background: var(--surface); border-radius: 28px; padding: clamp(20px, 4vw, 32px); display: flex; flex-direction: column; gap: 18px; }
+  .item { font: inherit; text-align: left; cursor: pointer; color: var(--text); background: transparent; border: 1.5px solid var(--line); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 2px; }
+  .item[aria-current="true"] { border-color: var(--accent); background: var(--surface); }
+  .item small { color: var(--muted); font-size: 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; }
+  .f { flex: 1 1 200px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .f label { font-size: 14px; color: var(--muted); }
+  .f input, .f select, .f textarea { font: inherit; color: var(--text); background: var(--bg); border: 1.5px solid var(--line); border-radius: 14px; padding: 13px 14px; width: 100%; }
+  .f input:focus, .f select:focus, .f textarea:focus { border-color: var(--text); outline: none; }
+  .f textarea { resize: vertical; }
+  .hint { font-size: 13px; color: var(--muted); }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .note { background: var(--surface); border-radius: 20px; padding: 18px 22px; color: var(--muted); font-size: 15px; }
+  .note b { color: var(--text); }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="wrap">
+    <a class="logo" href="index.html"><span class="logo__mark"></span><span class="logo__text">Редактор событий</span></a>
+    <div class="bar">
+      <a class="btn btn--ghost" href="index.html" target="_blank" rel="noopener">Открыть сайт</a>
+      <button class="btn btn--accent" id="download" type="button">Скачать events.js</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="note" style="margin-top: 32px">
+    <b>Как это работает.</b> Измените события ниже и нажмите «Скачать events.js». Затем замените этим файлом <b>assets/events.js</b> на хостинге — афиша на сайте обновится. Пока файл не загружен на хостинг, посетители видят старую афишу.
+  </div>
+
+  <div class="adm">
+    <div class="adm__list">
+      <div id="list" class="stack" style="gap: 8px"></div>
+      <button class="btn btn--light" id="add" type="button">+ Новое событие</button>
+    </div>
+
+    <form class="adm__form" id="form" autocomplete="off">
+      <div class="row">
+        <div class="f" style="flex-grow: 2"><label for="title">Название</label><input id="title" type="text"></div>
+        <div class="f"><label for="status">Статус</label>
+          <select id="status">
+            <option value="open">Билеты в продаже</option>
+            <option value="soon">Скоро в продаже</option>
+            <option value="soldout">Билеты закончились</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="f"><label for="date">Дата</label><input id="date" type="date"></div>
+        <div class="f"><label for="time">Начало</label><input id="time" type="time"></div>
+        <div class="f"><label for="city">Город</label><input id="city" type="text"></div>
+      </div>
+      <div class="f"><label for="venue">Площадка и адрес</label><input id="venue" type="text"></div>
+      <div class="f"><label for="short">Коротко, одна строка</label><input id="short" type="text"></div>
+      <div class="f"><label for="description">Описание</label><textarea id="description" rows="4"></textarea></div>
+      <div class="f"><label for="program">Программа</label><textarea id="program" rows="3" placeholder="19:00 | Сбор гостей"></textarea><span class="hint">Каждая строка: время | что происходит</span></div>
+      <div class="f"><label for="tickets">Билеты</label><textarea id="tickets" rows="3" placeholder="Стандарт | Вход и участие | 180"></textarea><span class="hint">Каждая строка: название | пояснение | цена в шекелях</span></div>
+      <div class="f"><label for="ticketUrl">Ссылка на оплату билета</label><input id="ticketUrl" type="url" placeholder="https://"><span class="hint">Страница события на JERA.club или платёжная ссылка. Если пусто — кнопка «Купить билет» откроет WhatsApp клуба.</span></div>
+      <div class="row">
+        <div class="f"><label for="cover">Обложка (путь к файлу)</label><input id="cover" type="text" placeholder="assets/img/event-1.jpg"></div>
+        <div class="f"><label for="id">Адрес страницы (латиницей)</label><input id="id" type="text"></div>
+      </div>
+      <label style="display: flex; gap: 10px; align-items: center"><input id="demo" type="checkbox" style="width: 20px; height: 20px"> Это пример — показывать метку «Пример»</label>
+      <div class="bar">
+        <button class="btn btn--ghost" id="remove" type="button">Удалить событие</button>
+        <span class="hint" id="saved"></span>
+      </div>
+    </form>
+  </div>
+</main>
+
+<script src="assets/events.js"></script>
+<script>
+(function () {
+  'use strict';
+  var events = JSON.parse(JSON.stringify(window.EVENTS || []));
+  var current = 0;
+  var $ = function (id) { return document.getElementById(id); };
+  var TEXT = ['title', 'status', 'date', 'time', 'city', 'venue', 'short', 'description', 'ticketUrl', 'cover', 'id'];
+  var MAP = { а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'ts',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya' };
+
+  function slug(s) {
+    return String(s).toLowerCase().split('').map(function (c) { return MAP[c] != null ? MAP[c] : c; }).join('')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+  }
+  function lines(v) { return String(v).split('\n').map(function (l) { return l.trim(); }).filter(Boolean); }
+
+  function renderList() {
+    var box = $('list');
+    box.textContent = '';
+    events.forEach(function (ev, i) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'item';
+      b.setAttribute('aria-current', i === current ? 'true' : 'false');
+      var t = document.createElement('span'); t.textContent = ev.title || 'Без названия'; t.style.fontWeight = '600';
+      var s = document.createElement('small'); s.textContent = [ev.date, ev.city, ev.demo ? 'пример' : ''].filter(Boolean).join(' · ');
+      b.appendChild(t); b.appendChild(s);
+      b.addEventListener('click', function () { current = i; renderList(); fill(); });
+      box.appendChild(b);
+    });
+    $('form').style.display = events.length ? '' : 'none';
+  }
+  function fill() {
+    var ev = events[current]; if (!ev) return;
+    TEXT.forEach(function (k) { $(k).value = ev[k] || (k === 'status' ? 'open' : ''); });
+    $('demo').checked = !!ev.demo;
+    $('program').value = (ev.program || []).map(function (r) { return r.time + ' | ' + r.text; }).join('\n');
+    $('tickets').value = (ev.tickets || []).map(function (t) { return [t.name, t.note || '', t.price].join(' | '); }).join('\n');
+  }
+  function read() {
+    var ev = events[current]; if (!ev) return;
+    var hadAutoId = !ev.id || ev.id === slug(ev.title || '');
+    TEXT.forEach(function (k) { ev[k] = $(k).value.trim(); });
+    if (hadAutoId && document.activeElement !== $('id')) { ev.id = slug(ev.title) || ev.id; $('id').value = ev.id; }
+    ev.id = slug(ev.id) || 'event-' + (current + 1);
+    ev.demo = $('demo').checked;
+    ev.program = lines($('program').value).map(function (l) {
+      var p = l.split('|'); return { time: (p[0] || '').trim(), text: p.slice(1).join('|').trim() };
+    });
+    ev.tickets = lines($('tickets').value).map(function (l) {
+      var p = l.split('|').map(function (x) { return x.trim(); });
+      var price = Number(String(p[p.length - 1]).replace(/[^\d.]/g, ''));
+      return { name: p[0] || 'Билет', note: p.length > 2 ? p[1] : '', price: isNaN(price) ? 0 : price };
+    });
+    $('saved').textContent = 'Изменения в черновике. Не забудьте скачать events.js.';
+    renderList();
+  }
+
+  $('form').addEventListener('input', read);
+  $('add').addEventListener('click', function () {
+    events.push({ id: '', demo: false, status: 'open', title: 'Новое событие', date: '', time: '', city: '', venue: '', cover: '', short: '', description: '', program: [], tickets: [], ticketUrl: '' });
+    current = events.length - 1; renderList(); fill(); $('title').focus(); $('title').select();
+  });
+  $('remove').addEventListener('click', function () {
+    events.splice(current, 1); current = Math.max(0, current - 1); renderList(); fill();
+    $('saved').textContent = 'Событие удалено из черновика. Не забудьте скачать events.js.';
+  });
+  $('download').addEventListener('click', function () {
+    var ids = {};
+    events.forEach(function (ev, i) { var b = ev.id || 'event-' + (i + 1), id = b, n = 2; while (ids[id]) { id = b + '-' + n++; } ids[id] = 1; ev.id = id; });
+    var text = '/* СОБЫТИЯ КЛУБА. Файл создан в редакторе admin.html.\n   Загрузите его на хостинг вместо assets/events.js. */\nwindow.EVENTS = ' + JSON.stringify(events, null, 2) + ';\n';
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/javascript' }));
+    a.download = 'events.js';
+    document.body.appendChild(a); a.click(); a.remove();
+    $('saved').textContent = 'Файл скачан. Замените им assets/events.js на хостинге.';
+    fill(); renderList();
+  });
+
+  renderList(); fill();
+})();
+</script>
+</body>
+</html>
