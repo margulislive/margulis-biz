@@ -21,4 +21,4 @@ http.createServer((req, res) => {
   if (!file || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(res, 404, 'Not found', 'text/plain');
   res.writeHead(200, { 'content-type':types[path.extname(file).toLowerCase()] || 'application/octet-stream' });
   if (req.method === 'HEAD') return res.end(); fs.createReadStream(file).pipe(res);
-}).listen(process.env.PORT || 8080);
+}).listen(process.env.INTERNAL_PORT || 3000);

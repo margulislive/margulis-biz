@@ -12,12 +12,12 @@ handle @admin {
 		{$ADMIN_LOGIN} {$ADMIN_PASSWORD_HASH}
 	}
 	rewrite * /admin.html
-	reverse_proxy localhost:8080
+	reverse_proxy localhost:3000
 }
 handle @write {
 	basicauth {
 		{$ADMIN_LOGIN} {$ADMIN_PASSWORD_HASH}
 	}
-	reverse_proxy localhost:8080
+	reverse_proxy localhost:3000
 }
-handle { reverse_proxy localhost:8080 }
+handle { reverse_proxy localhost:3000 }
