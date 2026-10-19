@@ -117,6 +117,7 @@
   var current = 0;
   var $ = function (id) { return document.getElementById(id); };
   var page = 'events', content = {}, contentReady = false, documents = {}, selectedGroup = '', invalidLinks = {};
+  var pendingUploads = 0, galleryJobs = [], galleryNotice = '';
   var labels = {top:'Первый экран и фотография',events:'Афиша',club:'О клубе',for:'Для кого',community:'JERA',faq:'Частые вопросы'};
   function socialHost(value) { try { var u=new URL(value); return u.protocol==='https:' && /^(?:www\.)?(?:jera\.club|t\.me|wa\.me|instagram\.com|facebook\.com)$/.test(u.hostname) ? u.hostname.replace(/^www\./,'') : ''; } catch (_) { return ''; } }
   function editable(f) { return f.type === 'text' ? f.element.tagName !== 'I' : f.type === 'link' && !!socialHost(f.value); }
@@ -139,10 +140,13 @@
   }
   function upload(file) {
     if (!file) return Promise.reject(Error('Файл не выбран'));
+    if (file.size > 10 * 1024 * 1024) return Promise.reject(Error('Файл больше 10 МБ. Выберите фотографию меньшего размера.'));
     return fetch('/api/upload', {method:'POST', headers:{'content-type':'application/octet-stream'}, body:file}).then(function (r) { return r.json().then(function (v) { if (!r.ok) throw Error(v.error || 'Не удалось загрузить'); return v.url; }); });
   }
   $('cover-upload').addEventListener('change', function () {
-    var input = this; upload(input.files[0]).then(function (url) { $('cover').value = url; read(); saveFeedback('Фото загружено. Нажмите «Сохранить изменения».'); }).catch(function (e) { saveFeedback(e.message); });
+    var input = this, event = events[current], file = input.files[0]; if (!event || !file) return;
+    pendingUploads++; input.disabled=true; saveFeedback('Загружаю обложку…');
+    upload(file).then(function (url) { event.cover=url; if (events[current] === event) $('cover').value=url; saveFeedback('Фото загружено. Нажмите «Сохранить изменения».'); }).catch(function (e) { saveFeedback('Не удалось загрузить обложку: '+e.message); }).finally(function () { pendingUploads--; input.disabled=false; input.value=''; });
   });
   function renderContent() {
     var fields = window.SiteContent.fields(documents[page]).filter(editable);
@@ -158,10 +162,26 @@
       (content.heroPhotos || []).forEach(function (url, index) {
         var row=document.createElement('div'); row.className='bar';
         var preview=document.createElement('img'); preview.src=url; preview.alt='Фото события'; preview.style.cssText='width:100px;height:65px;object-fit:cover;border-radius:8px'; row.appendChild(preview);
-        var remove=document.createElement('button'); remove.type='button'; remove.className='btn btn--ghost'; remove.textContent='Убрать фото'; remove.onclick=function () { content.heroPhotos.splice(index,1); $('saved').textContent='Есть несохранённые изменения.'; renderContent(); }; row.appendChild(remove); gallery.appendChild(row);
+        var remove=document.createElement('button'); remove.type='button'; remove.className='btn btn--ghost'; remove.textContent='Убрать фото'; remove.onclick=function () { content.heroPhotos.splice(index,1); galleryNotice='Фото убрано. Нажмите «Сохранить изменения».'; renderContent(); saveFeedback(galleryNotice); }; row.appendChild(remove); gallery.appendChild(row);
       });
+      galleryJobs.forEach(function (job) { var line=document.createElement('span'); line.className='hint'; line.textContent=job.name+' — '+job.message; gallery.appendChild(line); });
+      if (galleryNotice) { var notice=document.createElement('span'); notice.className='hint'; notice.setAttribute('role','status'); notice.textContent=galleryNotice; gallery.appendChild(notice); }
       var files=document.createElement('input'); files.type='file'; files.multiple=true; files.accept='image/jpeg,image/png,image/webp';
-      files.onchange=async function () { try { files.disabled=true; for (var file of files.files) { var url=await upload(file); (content.heroPhotos || (content.heroPhotos=[])).push(url); } $('saved').textContent='Фото загружены. Нажмите «Сохранить на сайте».'; renderContent(); } catch(e) { $('saved').textContent=e.message; files.disabled=false; } }; gallery.appendChild(files); form.appendChild(gallery);
+      files.disabled=pendingUploads>0;
+      files.onchange=async function () {
+        var chosen=Array.from(files.files); if (!chosen.length) return;
+        galleryJobs=chosen.map(function(file) { return {name:file.name, message:'ожидает загрузки'}; }); galleryNotice='';
+        pendingUploads++; renderContent(); saveFeedback('Загрузка фотографий… Подождите перед сохранением.');
+        var failed=0;
+        for (var i=0; i<chosen.length; i++) {
+          galleryJobs[i].message='загружается'; if (page==='index.html' && selectedGroup===labels.top) renderContent();
+          try { var url=await upload(chosen[i]); (content.heroPhotos || (content.heroPhotos=[])).push(url); galleryJobs[i].message='загружено'; }
+          catch (err) { failed++; galleryJobs[i].message='ошибка: '+err.message; }
+          if (page==='index.html' && selectedGroup===labels.top) renderContent();
+        }
+        pendingUploads--; galleryNotice=failed ? 'Загружены не все фотографии. Проверьте сообщения выше и повторите загрузку неудачных файлов.' : 'Фотографии загружены. Нажмите «Сохранить изменения», чтобы они появились на сайте.';
+        if (page==='index.html' && selectedGroup===labels.top) renderContent(); saveFeedback(galleryNotice);
+      }; gallery.appendChild(files); form.appendChild(gallery);
     }
     fields.filter(function (f) { return group(f.element) === selectedGroup; }).forEach(function (f) {
       var wrap=document.createElement('div'); wrap.className='f'; var label=document.createElement('label');
@@ -251,6 +271,7 @@
     saveFeedback('Событие удалено. Нажмите «Сохранить изменения».');
   });
   $('download').addEventListener('click', function () {
+    if (pendingUploads) { saveFeedback('Дождитесь окончания загрузки фотографий, затем сохраните изменения.'); return; }
     if (page !== 'events') {
       if (!contentReady) { $('saved').textContent='Содержимое ещё не загружено. Обновите страницу и попробуйте снова.'; return; }
       var invalid=Array.from(document.querySelectorAll('#content-form input[data-social-host]')).find(function (el) { return socialHost(el.value)!==el.dataset.socialHost; });
