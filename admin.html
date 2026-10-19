@@ -34,6 +34,12 @@
   .photo-order { display:flex; gap:6px; }
   .photo-order button { font:inherit; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:8px 12px; cursor:pointer; }
   .photo-order button:disabled { opacity:.3; cursor:default; }
+  .photo-preview { padding:0; border:0; border-radius:8px; background:transparent; cursor:zoom-in; line-height:0; }
+  .photo-preview:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+  .photo-dialog { width:min(94vw,1200px); max-width:none; max-height:94vh; padding:16px; border:1px solid var(--line); border-radius:22px; background:var(--surface); color:var(--text); }
+  .photo-dialog::backdrop { background:rgba(0,0,0,.84); }
+  .photo-dialog__bar { display:flex; justify-content:flex-end; margin-bottom:12px; }
+  .photo-dialog img { display:block; width:100%; max-height:calc(94vh - 100px); object-fit:contain; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -116,6 +122,11 @@
   </div>
 </main>
 
+<dialog id="photo-dialog" class="photo-dialog" aria-label="Просмотр фотографии">
+  <div class="photo-dialog__bar"><button type="button" class="btn btn--ghost" id="photo-dialog-close" aria-label="Закрыть просмотр фотографии">Закрыть ✕</button></div>
+  <img id="photo-dialog-image" alt="Фотография события в увеличенном размере">
+</dialog>
+
 <script src="assets/events.js"></script>
 <script src="assets/content.js"></script>
 <script>
@@ -126,6 +137,9 @@
   var $ = function (id) { return document.getElementById(id); };
   var page = 'index.html', content = {}, contentReady = false, documents = {}, selectedGroup = '', invalidLinks = {};
   var pendingUploads = 0, galleryJobs = [], galleryNotice = '';
+  var photoDialog = $('photo-dialog');
+  $('photo-dialog-close').addEventListener('click', function () { photoDialog.close(); });
+  photoDialog.addEventListener('click', function (e) { if (e.target === photoDialog) { var r=photoDialog.getBoundingClientRect(); if (e.clientX<r.left || e.clientX>r.right || e.clientY<r.top || e.clientY>r.bottom) photoDialog.close(); } });
   var labels = {top:'Первый экран и фотография',events:'Афиша',club:'О клубе',for:'Для кого',community:'JERA',faq:'Частые вопросы'};
   function socialHost(value) { try { var u=new URL(value); return u.protocol==='https:' && /^(?:www\.)?(?:jera\.club|t\.me|wa\.me|instagram\.com|facebook\.com)$/.test(u.hostname) ? u.hostname.replace(/^www\./,'') : ''; } catch (_) { return ''; } }
   function editable(f) { return f.type === 'text' ? f.element.tagName !== 'I' : f.type === 'link' && !!socialHost(f.value); }
@@ -184,7 +198,8 @@
           function cancel() { handle.removeEventListener('pointermove',over); handle.removeEventListener('pointerup',finish); handle.removeEventListener('pointercancel',cancel); row.classList.remove('is-dragging'); gallery.querySelectorAll('.photo-row').forEach(function(x) { x.classList.remove('is-target'); }); }
           handle.addEventListener('pointermove',over); handle.addEventListener('pointerup',finish); handle.addEventListener('pointercancel',cancel);
         }); row.appendChild(handle);
-        var preview=document.createElement('img'); preview.src=url; preview.alt='Фото события'; preview.style.cssText='width:100px;height:65px;object-fit:cover;border-radius:8px'; row.appendChild(preview);
+        var previewButton=document.createElement('button'); previewButton.type='button'; previewButton.className='photo-preview'; previewButton.setAttribute('aria-label','Увеличить фотографию '+(index+1)); previewButton.title='Открыть фотографию крупно';
+        var preview=document.createElement('img'); preview.src=url; preview.alt=''; preview.style.cssText='width:100px;height:65px;object-fit:cover;border-radius:8px'; previewButton.appendChild(preview); previewButton.onclick=function () { $('photo-dialog-image').src=url; photoDialog.showModal(); $('photo-dialog-close').focus(); }; row.appendChild(previewButton);
         var order=document.createElement('div'); order.className='photo-order';
         [['↑',index-1,'Переместить фото выше'],['↓',index+1,'Переместить фото ниже']].forEach(function(spec) { var button=document.createElement('button'); button.type='button'; button.textContent=spec[0]; button.setAttribute('aria-label',spec[2]); button.disabled=spec[1]<0 || spec[1]>=content.heroPhotos.length || pendingUploads>0; button.onclick=function() { movePhoto(index,spec[1]); }; order.appendChild(button); }); row.appendChild(order);
         var remove=document.createElement('button'); remove.type='button'; remove.className='btn btn--ghost'; remove.textContent='Убрать фото'; remove.onclick=function () { content.heroPhotos.splice(index,1); galleryNotice='Фото убрано. Нажмите «Сохранить изменения».'; renderContent(); saveFeedback(galleryNotice); }; row.appendChild(remove); gallery.appendChild(row);
