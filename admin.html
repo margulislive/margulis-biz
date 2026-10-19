@@ -91,10 +91,13 @@
         <div class="f" style="flex-grow: 2"><label for="title">Название</label><input id="title" type="text"></div>
         <div class="f"><label for="status">Статус</label>
           <select id="status">
+            <option value="free">Бесплатно</option>
             <option value="open">Билеты в продаже</option>
             <option value="soon">Скоро в продаже</option>
             <option value="soldout">Билеты закончились</option>
           </select>
+          <button class="btn btn--ghost" id="add-status" type="button">+ Добавить статус</button>
+          <span class="hint">Новый статус сохранится при сохранении изменений.</span>
         </div>
       </div>
       <div class="row">
@@ -107,7 +110,7 @@
       <div class="f"><label for="description">Описание</label><textarea id="description" rows="4"></textarea></div>
       <div class="f"><label for="program">Программа</label><textarea id="program" rows="3" placeholder="19:00 | Сбор гостей"></textarea><span class="hint">Каждая строка: время | что происходит</span></div>
       <div class="f"><label for="tickets">Билеты</label><textarea id="tickets" rows="3" placeholder="Стандарт | Вход и участие | 180"></textarea><span class="hint">Каждая строка: название | пояснение | цена в шекелях</span></div>
-      <div class="f"><label for="ticketUrl">Ссылка на оплату билета</label><input id="ticketUrl" type="url" placeholder="https://"><span class="hint">Страница события на JERA.club или платёжная ссылка. Если пусто — кнопка «Купить билет» откроет WhatsApp клуба.</span></div>
+      <div class="f"><label for="ticketUrl">Ссылка на регистрацию или оплату</label><input id="ticketUrl" type="url" placeholder="https://"><span class="hint">Страница события на JERA.club или платёжная ссылка. Если поле пусто, откроется WhatsApp клуба.</span></div>
       <div class="row">
         <div class="f"><label for="cover-upload">Обложка события</label><input id="cover" type="hidden"><input id="cover-upload" type="file" accept="image/jpeg,image/png,image/webp"><span class="hint">Выберите фотографию на устройстве.</span></div>
         <input id="id" type="hidden">
@@ -133,6 +136,7 @@
 (function () {
   'use strict';
   var events = JSON.parse(JSON.stringify(window.EVENTS || []));
+  var customStatuses = [];
   var current = 0;
   var $ = function (id) { return document.getElementById(id); };
   var page = 'index.html', content = {}, contentReady = false, documents = {}, selectedGroup = '', invalidLinks = {};
@@ -277,11 +281,28 @@
   }
   function fill() {
     var ev = events[current]; if (!ev) return;
+    renderStatuses(ev.status || 'open');
     TEXT.forEach(function (k) { $(k).value = ev[k] || (k === 'status' ? 'open' : ''); });
     $('demo').checked = !!ev.demo;
     $('program').value = (ev.program || []).map(function (r) { return r.time + ' | ' + r.text; }).join('\n');
     $('tickets').value = (ev.tickets || []).map(function (t) { return [t.name, t.note || '', t.price].join(' | '); }).join('\n');
   }
+  function renderStatuses(selected) {
+    var select = $('status');
+    Array.from(select.querySelectorAll('option[data-custom]')).forEach(function (option) { option.remove(); });
+    var labels = customStatuses.slice();
+    if (selected && selected.indexOf('custom:') === 0 && labels.indexOf(selected.slice(7)) === -1) labels.push(selected.slice(7));
+    labels.forEach(function (label) { var option = document.createElement('option'); option.value = 'custom:' + label; option.textContent = label; option.dataset.custom = 'true'; select.appendChild(option); });
+    select.value = selected;
+  }
+  $('add-status').addEventListener('click', function () {
+    var label = prompt('Название нового статуса:');
+    if (label === null) return;
+    label = label.trim();
+    if (!label || label.length > 60) { alert('Укажите название статуса длиной до 60 символов.'); return; }
+    if (customStatuses.indexOf(label) === -1) customStatuses.push(label);
+    renderStatuses('custom:' + label); read();
+  });
   function read() {
     var ev = events[current]; if (!ev) return;
     var hadAutoId = !ev.id || ev.id === slug(ev.title || '');
@@ -303,7 +324,7 @@
 
   $('form').addEventListener('input', read);
   $('add').addEventListener('click', function () {
-    events.push({ id: '', demo: false, status: 'open', title: 'Новое событие', date: '', time: '', city: '', venue: '', cover: '', short: '', description: '', program: [], tickets: [], ticketUrl: '' });
+    events.push({ id: '', demo: false, status: 'free', title: 'Новое событие', date: '', time: '', city: '', venue: '', cover: '', short: '', description: '', program: [], tickets: [{name:'Участие', note:'', price:0}], ticketUrl: '' });
     current = events.length - 1; renderList(); fill(); $('title').focus(); $('title').select();
   });
   $('remove').addEventListener('click', function () {
@@ -324,14 +345,14 @@
     events.forEach(function (ev, i) { var b = ev.id || 'event-' + (i + 1), id = b, n = 2; while (ids[id]) { id = b + '-' + n++; } ids[id] = 1; ev.id = id; });
     if (events.some(function (ev) { if (!ev.ticketUrl) return false; try { return new URL(ev.ticketUrl).protocol !== 'https:'; } catch (_) { return true; } })) { saveFeedback('Для оплаты укажите корректную ссылку, начинающуюся с https://'); return; }
     $('download').disabled = true; saveFeedback('Сохраняю…');
-    fetch('/api/events', { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify({events:events}) })
+    fetch('/api/events', { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify({events:events, statuses:customStatuses}) })
       .then(function (r) { if (!r.ok) throw Error(); saveFeedback('Сохранено на сервере.'); })
       .catch(function () { saveFeedback('Не удалось сохранить. Повторите попытку.'); })
       .finally(function () { $('download').disabled = false; });
     fill(); renderList();
   });
 
-  fetch('/api/events').then(function (r) { return r.json(); }).then(function (data) { if (Array.isArray(data.events)) events = data.events; renderList(); fill(); }).catch(function () { renderList(); fill(); });
+  fetch('/api/events').then(function (r) { return r.json(); }).then(function (data) { if (Array.isArray(data.events)) events = data.events; if (Array.isArray(data.statuses)) customStatuses = data.statuses.filter(function (s) { return typeof s === 'string' && s.length <= 60; }); renderList(); fill(); }).catch(function () { renderList(); fill(); });
 })();
 </script>
 </body>

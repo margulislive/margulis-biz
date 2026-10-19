@@ -59,9 +59,10 @@
   function eventUrl(ev) { return 'event.html?id=' + encodeURIComponent(ev.id); }
   function buyUrl(ev) {
     if (ev.ticketUrl) return ev.ticketUrl;
-    var text = 'Здравствуйте! Хочу купить билет на «' + ev.title + '», ' + dateLong(ev.date) + '.';
+    var text = 'Здравствуйте! Хочу ' + (isFree(ev) ? 'зарегистрироваться' : 'купить билет') + ' на «' + ev.title + '», ' + dateLong(ev.date) + '.';
     return 'https://wa.me/' + SITE.whatsapp + '?text=' + encodeURIComponent(text);
   }
+  function isFree(ev) { return ev.status === 'free' || (ev.tickets && ev.tickets.length > 0 && ev.tickets.every(function (t) { return Number(t.price) === 0; })); }
   function meta(ev, short) {
     return [short ? dateShort(ev.date) : dateDay(ev.date), ev.time, ev.city].filter(Boolean).join(' · ');
   }
@@ -69,6 +70,8 @@
     return ev.cover ? '<img src="' + esc(ev.cover) + '" alt="" loading="lazy" onerror="this.remove()">' : '';
   }
   function pill(ev) {
+    if (ev.status === 'free') return '<span class="pill">Бесплатно</span>';
+    if (typeof ev.status === 'string' && ev.status.indexOf('custom:') === 0) return '<span class="pill">' + esc(ev.status.slice(7)) + '</span>';
     if (ev.status === 'soon') return '<span class="pill pill--ghost">Скоро в продаже</span>';
     if (ev.status === 'soldout') return '<span class="pill pill--ghost">Билеты закончились</span>';
     return '<span class="pill">Купить билет</span>';
@@ -138,8 +141,9 @@
       action = '<p class="muted">Все билеты проданы. Напишите нам — сообщим, если место освободится.</p>' +
         '<a class="btn btn--ghost" href="https://wa.me/' + SITE.whatsapp + '" target="_blank" rel="noopener">Написать в WhatsApp</a>';
     } else {
-      action = '<a class="btn btn--accent btn--lg" href="' + esc(buyUrl(ev)) + '" target="_blank" rel="noopener">Купить билет ' + ARROW + '</a>' +
-        '<p class="small" style="text-align:center">' + (ev.ticketUrl ? 'Оплата откроется в новой вкладке.' : 'Откроется WhatsApp клуба — оформим билет в переписке.') + '</p>';
+      var free = isFree(ev);
+      action = '<a class="btn btn--accent btn--lg" href="' + esc(buyUrl(ev)) + '" target="_blank" rel="noopener">' + (free ? 'Зарегистрироваться ' : 'Купить билет ') + ARROW + '</a>' +
+        '<p class="small" style="text-align:center">' + (ev.ticketUrl ? (free ? 'Регистрация откроется в новой вкладке.' : 'Оплата откроется в новой вкладке.') : (free ? 'Откроется WhatsApp клуба для регистрации.' : 'Откроется WhatsApp клуба — оформим билет в переписке.')) + '</p>';
     }
 
     root.innerHTML =

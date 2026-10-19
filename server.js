@@ -77,7 +77,7 @@ http.createServer(async (req, res) => {
     if (url.pathname === '/admin.html') { if (!getSession(req)) { res.writeHead(303, { location:'/admin', 'cache-control':'no-store' }); return res.end(); } return serve(res, path.join(root, 'admin.html'), req.method); }
     if (url.pathname === '/api/events') {
       if (req.method === 'GET') return send(res, 200, fs.existsSync(eventsFile) ? fs.readFileSync(eventsFile) : '{}');
-      if (req.method === 'PUT') { if (!sameOrigin(req)) return send(res, 403, '{}'); if (!auth(req, res)) return; const data = await readJson(req); if (!Array.isArray(data.events)) return send(res, 400, JSON.stringify({ error:'Некорректные данные' })); saveJson(eventsFile, { events:data.events }); return send(res, 200, JSON.stringify({ ok:true })); }
+      if (req.method === 'PUT') { if (!sameOrigin(req)) return send(res, 403, '{}'); if (!auth(req, res)) return; const data = await readJson(req); if (!Array.isArray(data.events) || (data.statuses !== undefined && (!Array.isArray(data.statuses) || data.statuses.some(s => typeof s !== 'string' || !s.trim() || s.length > 60)))) return send(res, 400, JSON.stringify({ error:'Некорректные данные' })); const previous = fs.existsSync(eventsFile) ? JSON.parse(fs.readFileSync(eventsFile, 'utf8')) : {}; saveJson(eventsFile, { events:data.events, statuses:data.statuses === undefined ? (previous.statuses || []) : data.statuses }); return send(res, 200, JSON.stringify({ ok:true })); }
       return send(res, 405, '{}');
     }
     if (url.pathname === '/api/content') {
