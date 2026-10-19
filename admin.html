@@ -53,12 +53,23 @@
     <button class="btn btn--ghost" type="button" data-page="faq.html">Вопросы и ответы</button>
     <button class="btn btn--ghost" type="button" data-page="policy.html">Политика</button>
     <button class="btn btn--ghost" type="button" data-page="event.html">Страница события</button>
+    <button class="btn btn--ghost" type="button" data-page="account">Настройки входа</button>
   </div>
+  <form id="account-editor" class="adm__form" style="margin-top:24px;max-width:720px" hidden>
+    <h2 class="h3">Настройки входа</h2>
+    <div class="f"><label for="account-login">Email администратора</label><input id="account-login" type="email" autocomplete="username" required></div>
+    <div class="f"><label for="account-current">Текущий пароль</label><input id="account-current" type="password" autocomplete="current-password" required></div>
+    <div class="f"><label for="account-new">Новый пароль</label><input id="account-new" type="password" autocomplete="new-password" minlength="12"><span class="hint">Не менее 12 символов. Оставьте пустым, если меняете только email.</span></div>
+    <div class="f"><label for="account-repeat">Повторите новый пароль</label><input id="account-repeat" type="password" autocomplete="new-password"></div>
+    <button class="btn btn--accent" type="submit">Сохранить настройки входа</button><span class="hint" id="account-status" role="status"></span>
+  </form>
   <div id="content-editor" class="adm" hidden><div class="adm__list" id="content-nav"></div><div class="adm__form" id="content-form"></div></div>
   <div class="adm" id="events-editor">
     <div class="adm__list">
       <div id="list" class="stack" style="gap: 8px"></div>
       <button class="btn btn--light" id="add" type="button">+ Новое событие</button>
+      <button class="btn btn--accent" id="save-events-list" type="button">Сохранить изменения</button>
+      <span class="hint save-feedback" role="status"></span>
     </div>
 
     <form class="adm__form" id="form" autocomplete="off">
@@ -84,12 +95,14 @@
       <div class="f"><label for="tickets">Билеты</label><textarea id="tickets" rows="3" placeholder="Стандарт | Вход и участие | 180"></textarea><span class="hint">Каждая строка: название | пояснение | цена в шекелях</span></div>
       <div class="f"><label for="ticketUrl">Ссылка на оплату билета</label><input id="ticketUrl" type="url" placeholder="https://"><span class="hint">Страница события на JERA.club или платёжная ссылка. Если пусто — кнопка «Купить билет» откроет WhatsApp клуба.</span></div>
       <div class="row">
-        <div class="f"><label for="cover">Обложка события</label><input id="cover" type="text" placeholder="Ссылка на фотографию"><input id="cover-upload" type="file" accept="image/jpeg,image/png,image/webp"><span class="hint">Выберите фотографию на устройстве.</span></div>
-        <div class="f"><label for="id">Адрес страницы (латиницей)</label><input id="id" type="text"></div>
+        <div class="f"><label for="cover-upload">Обложка события</label><input id="cover" type="hidden"><input id="cover-upload" type="file" accept="image/jpeg,image/png,image/webp"><span class="hint">Выберите фотографию на устройстве.</span></div>
+        <input id="id" type="hidden">
       </div>
       <label style="display: flex; gap: 10px; align-items: center"><input id="demo" type="checkbox" style="width: 20px; height: 20px"> Это пример — показывать метку «Пример»</label>
       <div class="bar">
         <button class="btn btn--ghost" id="remove" type="button">Удалить событие</button>
+        <button class="btn btn--accent" id="save-events-bottom" type="button">Сохранить изменения</button>
+        <span class="hint save-feedback" role="status"></span>
       </div>
     </form>
   </div>
@@ -103,8 +116,19 @@
   var events = JSON.parse(JSON.stringify(window.EVENTS || []));
   var current = 0;
   var $ = function (id) { return document.getElementById(id); };
-  var page = 'events', content = {}, contentReady = false, documents = {}, selectedGroup = '';
+  var page = 'events', content = {}, contentReady = false, documents = {}, selectedGroup = '', invalidLinks = {};
   var labels = {top:'Первый экран и фотография',events:'Афиша',club:'О клубе',for:'Для кого',community:'JERA',faq:'Частые вопросы'};
+  function socialHost(value) { try { var u=new URL(value); return u.protocol==='https:' && /^(?:www\.)?(?:jera\.club|t\.me|wa\.me|instagram\.com|facebook\.com)$/.test(u.hostname) ? u.hostname.replace(/^www\./,'') : ''; } catch (_) { return ''; } }
+  function editable(f) { return f.type === 'text' ? f.element.tagName !== 'I' : f.type === 'link' && !!socialHost(f.value); }
+  function saveFeedback(value) { $('saved').textContent=value; document.querySelectorAll('.save-feedback').forEach(function (el) { el.textContent=value; }); }
+  $('save-events-bottom').onclick=function () { $('download').click(); };
+  $('save-events-list').onclick=function () { $('download').click(); };
+  $('account-editor').addEventListener('submit', function (e) {
+    e.preventDefault(); var status=$('account-status'), newPassword=$('account-new').value;
+    if (newPassword !== $('account-repeat').value) { status.textContent='Новые пароли не совпадают.'; return; }
+    var btn=this.querySelector('button'); btn.disabled=true; status.textContent='Сохраняю…';
+    fetch('/api/admin/account',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({login:$('account-login').value,currentPassword:$('account-current').value,newPassword:newPassword})}).then(function (r) { return r.json().then(function (data) { if (!r.ok) throw Error(data.error || 'Не удалось сохранить.'); }); }).then(function () { $('account-current').value=''; $('account-new').value=''; $('account-repeat').value=''; status.textContent='Настройки входа сохранены. Другие сеансы завершены.'; }).catch(function (err) { status.textContent=err.message; }).finally(function () { btn.disabled=false; });
+  });
   function group(el) {
     if (el.closest('.marquee')) return 'Бегущая строка';
     var section = el.closest('section,header,footer,main');
@@ -118,10 +142,10 @@
     return fetch('/api/upload', {method:'POST', headers:{'content-type':'application/octet-stream'}, body:file}).then(function (r) { return r.json().then(function (v) { if (!r.ok) throw Error(v.error || 'Не удалось загрузить'); return v.url; }); });
   }
   $('cover-upload').addEventListener('change', function () {
-    var input = this; upload(input.files[0]).then(function (url) { $('cover').value = url; read(); $('saved').textContent = 'Фото загружено. Нажмите «Сохранить на сайте».'; }).catch(function (e) { $('saved').textContent = e.message; });
+    var input = this; upload(input.files[0]).then(function (url) { $('cover').value = url; read(); saveFeedback('Фото загружено. Нажмите «Сохранить изменения».'); }).catch(function (e) { saveFeedback(e.message); });
   });
   function renderContent() {
-    var fields = window.SiteContent.fields(documents[page]);
+    var fields = window.SiteContent.fields(documents[page]).filter(editable);
     var groups = Array.from(new Set(fields.map(function (f) { return group(f.element); })));
     if (!groups.includes(selectedGroup)) selectedGroup = groups[0];
     var nav = $('content-nav'), form = $('content-form'); nav.textContent = ''; form.textContent = '';
@@ -145,22 +169,27 @@
       label.textContent = f.type === 'image' ? 'Фотография' : f.type === 'link' ? 'Ссылка: ' + description : 'Текст';
       var input = document.createElement(f.type === 'text' ? 'textarea' : 'input'); if (f.type === 'text') input.rows = f.value.length > 90 ? 4 : 2; else input.type='text';
       input.value = Object.prototype.hasOwnProperty.call(content[page] || {}, f.key) ? content[page][f.key] : f.value;
-      input.oninput=function () { content[page] = content[page] || {}; content[page][f.key]=input.value; $('saved').textContent='Есть несохранённые изменения.'; };
+      input.oninput=function () { content[page] = content[page] || {}; content[page][f.key]=input.value; if (f.type === 'link') { var id=page+'|'+f.key; if (socialHost(input.value)!==socialHost(f.value)) invalidLinks[id]=true; else delete invalidLinks[id]; } saveFeedback('Есть несохранённые изменения.'); };
+      if (f.type === 'link') { input.type='url'; input.dataset.socialHost=socialHost(f.value); }
       wrap.appendChild(label); wrap.appendChild(input);
       if (f.type === 'image') { var file=document.createElement('input'); file.type='file'; file.accept='image/jpeg,image/png,image/webp'; file.onchange=function () { upload(file.files[0]).then(function (url) { input.value=url; input.oninput(); $('saved').textContent='Фото загружено. Нажмите «Сохранить на сайте».'; }).catch(function(e) { $('saved').textContent=e.message; }); }; wrap.appendChild(file); }
       form.appendChild(wrap);
     });
+    var bottom=document.createElement('div'); bottom.className='bar'; var save=document.createElement('button'); save.type='button'; save.className='btn btn--accent'; save.textContent='Сохранить изменения'; save.onclick=function () { $('download').click(); }; bottom.appendChild(save); var feedback=document.createElement('span'); feedback.className='hint save-feedback'; feedback.setAttribute('role','status'); bottom.appendChild(feedback); form.appendChild(bottom);
   }
   $('tabs').addEventListener('click', function (e) {
     var b=e.target.closest('[data-page]'); if (!b) return; page=b.dataset.page; selectedGroup='';
     Array.from($('tabs').children).forEach(function (x) { x.className='btn '+(x===b?'btn--light':'btn--ghost'); });
-    $('events-editor').hidden=page!=='events'; $('content-editor').hidden=page==='events';
+    $('events-editor').hidden=page!=='events'; $('content-editor').hidden=page==='events' || page==='account'; $('account-editor').hidden=page!=='account'; $('download').hidden=page==='account';
+    if (page==='account') { $('account-status').textContent=''; fetch('/api/admin/account').then(function(r) { if(!r.ok) throw Error(); return r.json(); }).then(function(data) { $('account-login').value=data.login; }).catch(function () { $('account-status').textContent='Не удалось загрузить настройки входа.'; }); return; }
     if (page==='events') return;
+    if (!contentReady) { $('content-form').textContent='Загрузка содержимого…'; return; }
     if (documents[page]) return renderContent();
     $('content-form').textContent='Загрузка…';
-    fetch('/'+page).then(function(r) { if(!r.ok) throw Error(); return r.text(); }).then(function(html) { documents[page]=new DOMParser().parseFromString(html,'text/html'); renderContent(); }).catch(function () { $('content-form').textContent='Не удалось загрузить страницу.'; });
+    var requestedPage=page;
+    fetch('/'+requestedPage).then(function(r) { if(!r.ok) throw Error(); return r.text(); }).then(function(html) { documents[requestedPage]=new DOMParser().parseFromString(html,'text/html'); if (page===requestedPage) renderContent(); }).catch(function () { if (page===requestedPage) $('content-form').textContent='Не удалось загрузить страницу.'; });
   });
-  fetch('/api/content').then(function(r) { if (!r.ok) throw Error(); return r.json(); }).then(function(data) { content=data; contentReady=true; if (page !== 'events' && documents[page]) renderContent(); }).catch(function () { $('saved').textContent='Не удалось загрузить содержимое сайта. Обновите страницу.'; });
+  fetch('/api/content').then(function(r) { if (!r.ok) throw Error(); return r.json(); }).then(function(data) { content=data; contentReady=true; if (page !== 'events' && page !== 'account') { var active=$('tabs').querySelector('[data-page="'+page+'"]'); if (active) active.click(); } }).catch(function () { $('saved').textContent='Не удалось загрузить содержимое сайта. Обновите страницу.'; });
   var TEXT = ['title', 'status', 'date', 'time', 'city', 'venue', 'short', 'description', 'ticketUrl', 'cover', 'id'];
   $('logout').addEventListener('click', function () { fetch('/api/logout', {method:'POST'}).then(function () { location.href = '/admin'; }); });
   var MAP = { а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'ts',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya' };
@@ -208,7 +237,7 @@
       var price = Number(String(p[p.length - 1]).replace(/[^\d.]/g, ''));
       return { name: p[0] || 'Билет', note: p.length > 2 ? p[1] : '', price: isNaN(price) ? 0 : price };
     });
-    $('saved').textContent = 'Есть несохранённые изменения.';
+    saveFeedback('Есть несохранённые изменения.');
     renderList();
   }
 
@@ -219,21 +248,24 @@
   });
   $('remove').addEventListener('click', function () {
     events.splice(current, 1); current = Math.max(0, current - 1); renderList(); fill();
-    $('saved').textContent = 'Событие удалено. Нажмите «Сохранить на сайте».';
+    saveFeedback('Событие удалено. Нажмите «Сохранить изменения».');
   });
   $('download').addEventListener('click', function () {
     if (page !== 'events') {
       if (!contentReady) { $('saved').textContent='Содержимое ещё не загружено. Обновите страницу и попробуйте снова.'; return; }
-      $('download').disabled=true; $('saved').textContent='Сохраняю…';
-      fetch('/api/content', {method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(content)}).then(function(r) { if(!r.ok) throw Error(); $('saved').textContent='Изменения сохранены на сайте.'; }).catch(function() { $('saved').textContent='Не удалось сохранить изменения.'; }).finally(function() { $('download').disabled=false; });
+      var invalid=Array.from(document.querySelectorAll('#content-form input[data-social-host]')).find(function (el) { return socialHost(el.value)!==el.dataset.socialHost; });
+      if (invalid || Object.keys(invalidLinks).length) { saveFeedback('Укажите действительную HTTPS-ссылку на соответствующий сервис во всех изменённых разделах.'); if (invalid) invalid.focus(); return; }
+      $('download').disabled=true; saveFeedback('Сохраняю…');
+      fetch('/api/content', {method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(content)}).then(function(r) { if(!r.ok) throw Error(); saveFeedback('Изменения сохранены на сайте.'); }).catch(function() { saveFeedback('Не удалось сохранить изменения.'); }).finally(function() { $('download').disabled=false; });
       return;
     }
     var ids = {};
     events.forEach(function (ev, i) { var b = ev.id || 'event-' + (i + 1), id = b, n = 2; while (ids[id]) { id = b + '-' + n++; } ids[id] = 1; ev.id = id; });
-    $('download').disabled = true; $('saved').textContent = 'Сохраняю…';
+    if (events.some(function (ev) { if (!ev.ticketUrl) return false; try { return new URL(ev.ticketUrl).protocol !== 'https:'; } catch (_) { return true; } })) { saveFeedback('Для оплаты укажите корректную ссылку, начинающуюся с https://'); return; }
+    $('download').disabled = true; saveFeedback('Сохраняю…');
     fetch('/api/events', { method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify({events:events}) })
-      .then(function (r) { if (!r.ok) throw Error(); $('saved').textContent = 'Сохранено на сервере.'; })
-      .catch(function () { $('saved').textContent = 'Не удалось сохранить. Повторите попытку.'; })
+      .then(function (r) { if (!r.ok) throw Error(); saveFeedback('Сохранено на сервере.'); })
+      .catch(function () { saveFeedback('Не удалось сохранить. Повторите попытку.'); })
       .finally(function () { $('download').disabled = false; });
     fill(); renderList();
   });
