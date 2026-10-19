@@ -86,7 +86,7 @@ h1, h2, h3, p { margin: 0; }
   gap: 8px 32px; padding-top: 18px; padding-bottom: 18px;
 }
 .logo { display: flex; align-items: center; gap: 12px; text-decoration: none; min-height: 44px; }
-.logo__mark { width: 12px; height: 12px; background: var(--accent); border-radius: 3px; }
+.logo__mark { width: 12px; height: 12px; background: var(--accent); border-radius: 50%; }
 .logo__img { height: 36px; width: auto; }
 .logo--image .logo__mark, .logo--image .logo__text { display: none; }
 .logo__text { font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: -.01em; }
