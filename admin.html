@@ -110,7 +110,7 @@
       <div class="f"><label for="description">Описание</label><textarea id="description" rows="4"></textarea></div>
       <div class="f"><label for="program">Программа</label><textarea id="program" rows="3" placeholder="19:00 | Сбор гостей"></textarea><span class="hint">Каждая строка: время | что происходит</span></div>
       <div class="f"><label for="tickets">Билеты</label><textarea id="tickets" rows="3" placeholder="Стандарт | Вход и участие | 180"></textarea><span class="hint">Каждая строка: название | пояснение | цена в шекелях</span></div>
-      <div class="f"><label for="ticketUrl">Ссылка на регистрацию или оплату</label><input id="ticketUrl" type="url" placeholder="https://"><span class="hint">Страница события на JERA.club или платёжная ссылка. Если поле пусто, откроется WhatsApp клуба.</span></div>
+      <div class="f"><label for="ticketUrl">Ссылка на регистрацию или оплату</label><input id="ticketUrl" type="url" placeholder="https://"><span class="hint">Укажите страницу события на JERA.club или платёжную ссылку. Если поле пусто, откроется JERA.club.</span></div>
       <div class="row">
         <div class="f"><label for="cover-upload">Обложка события</label><input id="cover" type="hidden"><input id="cover-upload" type="file" accept="image/jpeg,image/png,image/webp"><span class="hint">Выберите фотографию на устройстве.</span></div>
         <input id="id" type="hidden">
@@ -145,7 +145,7 @@
   $('photo-dialog-close').addEventListener('click', function () { photoDialog.close(); });
   photoDialog.addEventListener('click', function (e) { if (e.target === photoDialog) { var r=photoDialog.getBoundingClientRect(); if (e.clientX<r.left || e.clientX>r.right || e.clientY<r.top || e.clientY>r.bottom) photoDialog.close(); } });
   var labels = {top:'Первый экран и фотография',events:'Афиша',club:'О клубе',for:'Для кого',community:'JERA',faq:'Частые вопросы'};
-  function socialHost(value) { try { var u=new URL(value); return u.protocol==='https:' && /^(?:www\.)?(?:jera\.club|t\.me|wa\.me|instagram\.com|facebook\.com)$/.test(u.hostname) ? u.hostname.replace(/^www\./,'') : ''; } catch (_) { return ''; } }
+  function socialHost(value) { try { var u=new URL(value); return u.protocol==='https:' && /^(?:www\.)?(?:jera\.club|t\.me|instagram\.com|facebook\.com)$/.test(u.hostname) ? u.hostname.replace(/^www\./,'') : ''; } catch (_) { return ''; } }
   function editable(f) { return f.type === 'text' ? f.element.tagName !== 'I' : f.type === 'link' && !!socialHost(f.value); }
   function saveFeedback(value) { $('saved').textContent=value; document.querySelectorAll('.save-feedback').forEach(function (el) { el.textContent=value; }); }
   $('save-events-bottom').onclick=function () { $('download').click(); };

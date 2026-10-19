@@ -5,7 +5,6 @@
 
   var SITE = {
     jera: 'https://jera.club',
-    whatsapp: '972533335040',
     telegram: 'https://t.me/margulis_club'
   };
 
@@ -58,9 +57,8 @@
   }
   function eventUrl(ev) { return 'event.html?id=' + encodeURIComponent(ev.id); }
   function buyUrl(ev) {
-    if (ev.ticketUrl) return ev.ticketUrl;
-    var text = 'Здравствуйте! Хочу ' + (isFree(ev) ? 'зарегистрироваться' : 'купить билет') + ' на «' + ev.title + '», ' + dateLong(ev.date) + '.';
-    return 'https://wa.me/' + SITE.whatsapp + '?text=' + encodeURIComponent(text);
+    if (ev.ticketUrl) { try { var url = new URL(ev.ticketUrl); if (url.protocol === 'https:' && !/(^|\.)(wa\.me|whatsapp\.com)$/.test(url.hostname)) return ev.ticketUrl; } catch (_) {} }
+    return SITE.jera;
   }
   function isFree(ev) { return ev.status === 'free' || (ev.tickets && ev.tickets.length > 0 && ev.tickets.every(function (t) { return Number(t.price) === 0; })); }
   function meta(ev, short) {
@@ -138,12 +136,12 @@
       action = '<p class="muted">Продажа билетов скоро откроется. Анонс — в Telegram клуба.</p>' +
         '<a class="btn btn--light" href="' + SITE.telegram + '" target="_blank" rel="noopener">Подписаться в Telegram</a>';
     } else if (ev.status === 'soldout') {
-      action = '<p class="muted">Все билеты проданы. Напишите нам — сообщим, если место освободится.</p>' +
-        '<a class="btn btn--ghost" href="https://wa.me/' + SITE.whatsapp + '" target="_blank" rel="noopener">Написать в WhatsApp</a>';
+      action = '<p class="muted">Все билеты проданы. Следите за новыми событиями клуба в Telegram.</p>' +
+        '<a class="btn btn--ghost" href="' + SITE.telegram + '" target="_blank" rel="noopener">Перейти в Telegram</a>';
     } else {
       var free = isFree(ev);
       action = '<a class="btn btn--accent btn--lg" href="' + esc(buyUrl(ev)) + '" target="_blank" rel="noopener">' + (free ? 'Зарегистрироваться ' : 'Купить билет ') + ARROW + '</a>' +
-        '<p class="small" style="text-align:center">' + (ev.ticketUrl ? (free ? 'Регистрация откроется в новой вкладке.' : 'Оплата откроется в новой вкладке.') : (free ? 'Откроется WhatsApp клуба для регистрации.' : 'Откроется WhatsApp клуба — оформим билет в переписке.')) + '</p>';
+        '<p class="small" style="text-align:center">' + (buyUrl(ev) === SITE.jera ? 'Откроется JERA.club в новой вкладке.' : (free ? 'Регистрация откроется в новой вкладке.' : 'Страница билетов откроется в новой вкладке.')) + '</p>';
     }
 
     root.innerHTML =
