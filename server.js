@@ -6,7 +6,11 @@ const bcrypt = require('bcryptjs');
 const root = __dirname;
 const dataDir = process.env.DATA_DIR || path.join(root, 'data');
 const eventsFile = path.join(dataDir, 'events.json');
+const contentFile = path.join(dataDir, 'content.json');
+const uploadsDir = path.join(dataDir, 'uploads');
 fs.mkdirSync(dataDir, { recursive: true });
+fs.mkdirSync(uploadsDir, { recursive: true });
+function saveJson(file, value) { const temp = file + '.' + crypto.randomBytes(8).toString('hex') + '.tmp'; fs.writeFileSync(temp, JSON.stringify(value, null, 2), { mode: 0o600 }); fs.renameSync(temp, file); }
 const sessions = new Map();
 const attempts = new Map();
 const types = { '.html':'text/html; charset=utf-8', '.js':'application/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.svg':'image/svg+xml', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.webp':'image/webp' };
@@ -41,9 +45,27 @@ http.createServer(async (req, res) => {
     if (url.pathname === '/admin.html') { if (!getSession(req)) { res.writeHead(303, { location:'/admin', 'cache-control':'no-store' }); return res.end(); } return serve(res, path.join(root, 'admin.html'), req.method); }
     if (url.pathname === '/api/events') {
       if (req.method === 'GET') return send(res, 200, fs.existsSync(eventsFile) ? fs.readFileSync(eventsFile) : '{}');
-      if (req.method === 'PUT') { if (!sameOrigin(req)) return send(res, 403, '{}'); if (!auth(req, res)) return; const data = await readJson(req); if (!Array.isArray(data.events)) return send(res, 400, JSON.stringify({ error:'Некорректные данные' })); fs.writeFileSync(eventsFile, JSON.stringify({ events:data.events }, null, 2)); return send(res, 200, JSON.stringify({ ok:true })); }
+      if (req.method === 'PUT') { if (!sameOrigin(req)) return send(res, 403, '{}'); if (!auth(req, res)) return; const data = await readJson(req); if (!Array.isArray(data.events)) return send(res, 400, JSON.stringify({ error:'Некорректные данные' })); saveJson(eventsFile, { events:data.events }); return send(res, 200, JSON.stringify({ ok:true })); }
       return send(res, 405, '{}');
     }
+    if (url.pathname === '/api/content') {
+      if (req.method === 'GET') return send(res, 200, fs.existsSync(contentFile) ? fs.readFileSync(contentFile) : '{}');
+      if (req.method === 'PUT') { if (!sameOrigin(req)) return send(res, 403, '{}'); if (!auth(req, res)) return; const data = await readJson(req); if (!data || Array.isArray(data) || typeof data !== 'object') return send(res, 400, '{}'); saveJson(contentFile, data); return send(res, 200, '{"ok":true}'); }
+      return send(res, 405, '{}');
+    }
+    if (url.pathname === '/api/upload' && req.method === 'POST') {
+      if (!sameOrigin(req)) return send(res, 403, '{}'); if (!auth(req, res)) return;
+      const chunks = []; let size = 0;
+      for await (const chunk of req) { size += chunk.length; if (size > 10 * 1024 * 1024) return send(res, 413, JSON.stringify({error:'Максимальный размер фотографии — 10 МБ'})); chunks.push(chunk); }
+      const bytes = Buffer.concat(chunks); let ext;
+      if (bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) ext = '.jpg';
+      else if (bytes.length > 8 && bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) ext = '.png';
+      else if (bytes.length > 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') ext = '.webp';
+      else return send(res, 400, JSON.stringify({error:'Выберите изображение JPEG, PNG или WebP'}));
+      const name = crypto.randomUUID() + ext; fs.writeFileSync(path.join(uploadsDir, name), bytes, { mode:0o600 });
+      return send(res, 200, JSON.stringify({url:'/uploads/' + name}));
+    }
+    if (/^\/uploads\/[a-f0-9-]{36}\.(jpg|png|webp)$/.test(url.pathname) && (req.method === 'GET' || req.method === 'HEAD')) return serve(res, path.join(uploadsDir, path.basename(url.pathname)), req.method);
     if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'Method Not Allowed', 'text/plain');
     const pathname = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
     if (!/^\/(?:index\.html|event\.html|faq\.html|policy\.html|login\.html|assets\/[^.][^\0]*)$/.test(pathname)) return send(res, 404, 'Not found', 'text/plain');

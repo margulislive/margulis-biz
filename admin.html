@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Редактор событий — Margulis Business Club</title>
+<title>Управление сайтом — Margulis Business Club</title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,27 +26,36 @@
   .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .note { background: var(--surface); border-radius: 20px; padding: 18px 22px; color: var(--muted); font-size: 15px; }
   .note b { color: var(--text); }
+  [hidden] { display: none !important; }
 </style>
 </head>
-<body>
+<body data-admin>
 
 <header class="header">
   <div class="wrap">
-    <a class="logo" href="index.html"><span class="logo__mark"></span><span class="logo__text">Редактор событий</span></a>
+    <a class="logo" href="index.html"><span class="logo__mark"></span><span class="logo__text">Управление сайтом</span></a>
     <div class="bar">
       <a class="btn btn--ghost" href="index.html" target="_blank" rel="noopener">Открыть сайт</a>
       <button class="btn btn--ghost" id="logout" type="button">Выйти</button>
       <button class="btn btn--accent" id="download" type="button">Сохранить на сайте</button>
+      <span class="hint" id="saved" role="status"></span>
     </div>
   </div>
 </header>
 
 <main class="wrap">
   <div class="note" style="margin-top: 32px">
-    <b>Как это работает.</b> Изменяйте события и нажимайте «Сохранить на сайте». Афиша обновится сразу — ничего скачивать или загружать на GitHub не нужно.
+    <b>Как это работает.</b> Выберите раздел, внесите изменения и нажмите «Сохранить на сайте». Для фотографий используйте JPEG, PNG или WebP до 10 МБ.
   </div>
-
-  <div class="adm">
+  <div class="bar" style="margin-top:24px" id="tabs">
+    <button class="btn btn--light" type="button" data-page="events">События</button>
+    <button class="btn btn--ghost" type="button" data-page="index.html">Главная страница</button>
+    <button class="btn btn--ghost" type="button" data-page="faq.html">Вопросы и ответы</button>
+    <button class="btn btn--ghost" type="button" data-page="policy.html">Политика</button>
+    <button class="btn btn--ghost" type="button" data-page="event.html">Страница события</button>
+  </div>
+  <div id="content-editor" class="adm" hidden><div class="adm__list" id="content-nav"></div><div class="adm__form" id="content-form"></div></div>
+  <div class="adm" id="events-editor">
     <div class="adm__list">
       <div id="list" class="stack" style="gap: 8px"></div>
       <button class="btn btn--light" id="add" type="button">+ Новое событие</button>
@@ -75,25 +84,83 @@
       <div class="f"><label for="tickets">Билеты</label><textarea id="tickets" rows="3" placeholder="Стандарт | Вход и участие | 180"></textarea><span class="hint">Каждая строка: название | пояснение | цена в шекелях</span></div>
       <div class="f"><label for="ticketUrl">Ссылка на оплату билета</label><input id="ticketUrl" type="url" placeholder="https://"><span class="hint">Страница события на JERA.club или платёжная ссылка. Если пусто — кнопка «Купить билет» откроет WhatsApp клуба.</span></div>
       <div class="row">
-        <div class="f"><label for="cover">Обложка (путь к файлу)</label><input id="cover" type="text" placeholder="assets/img/event-1.jpg"></div>
+        <div class="f"><label for="cover">Обложка события</label><input id="cover" type="text" placeholder="Ссылка на фотографию"><input id="cover-upload" type="file" accept="image/jpeg,image/png,image/webp"><span class="hint">Выберите фотографию на устройстве.</span></div>
         <div class="f"><label for="id">Адрес страницы (латиницей)</label><input id="id" type="text"></div>
       </div>
       <label style="display: flex; gap: 10px; align-items: center"><input id="demo" type="checkbox" style="width: 20px; height: 20px"> Это пример — показывать метку «Пример»</label>
       <div class="bar">
         <button class="btn btn--ghost" id="remove" type="button">Удалить событие</button>
-        <span class="hint" id="saved"></span>
       </div>
     </form>
   </div>
 </main>
 
 <script src="assets/events.js"></script>
+<script src="assets/content.js"></script>
 <script>
 (function () {
   'use strict';
   var events = JSON.parse(JSON.stringify(window.EVENTS || []));
   var current = 0;
   var $ = function (id) { return document.getElementById(id); };
+  var page = 'events', content = {}, contentReady = false, documents = {}, selectedGroup = '';
+  var labels = {top:'Первый экран и фотография',events:'Афиша',club:'О клубе',for:'Для кого',community:'JERA',faq:'Частые вопросы'};
+  function group(el) {
+    if (el.closest('.marquee')) return 'Бегущая строка';
+    var section = el.closest('section,header,footer,main');
+    if (!section) return 'Другое';
+    if (section.tagName === 'HEADER') return 'Шапка и меню';
+    if (section.tagName === 'FOOTER') return 'Подвал и контакты';
+    return labels[section.id] || (section.querySelector('h1,h2') || {}).textContent?.trim() || 'Основное содержание';
+  }
+  function upload(file) {
+    if (!file) return Promise.reject(Error('Файл не выбран'));
+    return fetch('/api/upload', {method:'POST', headers:{'content-type':'application/octet-stream'}, body:file}).then(function (r) { return r.json().then(function (v) { if (!r.ok) throw Error(v.error || 'Не удалось загрузить'); return v.url; }); });
+  }
+  $('cover-upload').addEventListener('change', function () {
+    var input = this; upload(input.files[0]).then(function (url) { $('cover').value = url; read(); $('saved').textContent = 'Фото загружено. Нажмите «Сохранить на сайте».'; }).catch(function (e) { $('saved').textContent = e.message; });
+  });
+  function renderContent() {
+    var fields = window.SiteContent.fields(documents[page]);
+    var groups = Array.from(new Set(fields.map(function (f) { return group(f.element); })));
+    if (!groups.includes(selectedGroup)) selectedGroup = groups[0];
+    var nav = $('content-nav'), form = $('content-form'); nav.textContent = ''; form.textContent = '';
+    groups.forEach(function (name) { var b = document.createElement('button'); b.type='button'; b.className='item'; b.textContent=name; b.setAttribute('aria-current', String(name===selectedGroup)); b.onclick=function () { selectedGroup=name; renderContent(); }; nav.appendChild(b); });
+    var heading = document.createElement('h2'); heading.className='h3'; heading.textContent=selectedGroup; form.appendChild(heading);
+    if (page === 'index.html' && selectedGroup === labels.top) {
+      var gallery=document.createElement('div'); gallery.className='f';
+      var galleryLabel=document.createElement('label'); galleryLabel.textContent='Фотографии событий на первом экране'; gallery.appendChild(galleryLabel);
+      var info=document.createElement('span'); info.className='hint'; info.textContent='Несколько фотографий будут сменять друг друга. Сохраните изменения после загрузки.'; gallery.appendChild(info);
+      (content.heroPhotos || []).forEach(function (url, index) {
+        var row=document.createElement('div'); row.className='bar';
+        var preview=document.createElement('img'); preview.src=url; preview.alt='Фото события'; preview.style.cssText='width:100px;height:65px;object-fit:cover;border-radius:8px'; row.appendChild(preview);
+        var remove=document.createElement('button'); remove.type='button'; remove.className='btn btn--ghost'; remove.textContent='Убрать фото'; remove.onclick=function () { content.heroPhotos.splice(index,1); $('saved').textContent='Есть несохранённые изменения.'; renderContent(); }; row.appendChild(remove); gallery.appendChild(row);
+      });
+      var files=document.createElement('input'); files.type='file'; files.multiple=true; files.accept='image/jpeg,image/png,image/webp';
+      files.onchange=async function () { try { files.disabled=true; for (var file of files.files) { var url=await upload(file); (content.heroPhotos || (content.heroPhotos=[])).push(url); } $('saved').textContent='Фото загружены. Нажмите «Сохранить на сайте».'; renderContent(); } catch(e) { $('saved').textContent=e.message; files.disabled=false; } }; gallery.appendChild(files); form.appendChild(gallery);
+    }
+    fields.filter(function (f) { return group(f.element) === selectedGroup; }).forEach(function (f) {
+      var wrap=document.createElement('div'); wrap.className='f'; var label=document.createElement('label');
+      var description = (f.element.textContent || f.element.alt || '').trim().replace(/\s+/g,' ').slice(0,65);
+      label.textContent = f.type === 'image' ? 'Фотография' : f.type === 'link' ? 'Ссылка: ' + description : 'Текст';
+      var input = document.createElement(f.type === 'text' ? 'textarea' : 'input'); if (f.type === 'text') input.rows = f.value.length > 90 ? 4 : 2; else input.type='text';
+      input.value = Object.prototype.hasOwnProperty.call(content[page] || {}, f.key) ? content[page][f.key] : f.value;
+      input.oninput=function () { content[page] = content[page] || {}; content[page][f.key]=input.value; $('saved').textContent='Есть несохранённые изменения.'; };
+      wrap.appendChild(label); wrap.appendChild(input);
+      if (f.type === 'image') { var file=document.createElement('input'); file.type='file'; file.accept='image/jpeg,image/png,image/webp'; file.onchange=function () { upload(file.files[0]).then(function (url) { input.value=url; input.oninput(); $('saved').textContent='Фото загружено. Нажмите «Сохранить на сайте».'; }).catch(function(e) { $('saved').textContent=e.message; }); }; wrap.appendChild(file); }
+      form.appendChild(wrap);
+    });
+  }
+  $('tabs').addEventListener('click', function (e) {
+    var b=e.target.closest('[data-page]'); if (!b) return; page=b.dataset.page; selectedGroup='';
+    Array.from($('tabs').children).forEach(function (x) { x.className='btn '+(x===b?'btn--light':'btn--ghost'); });
+    $('events-editor').hidden=page!=='events'; $('content-editor').hidden=page==='events';
+    if (page==='events') return;
+    if (documents[page]) return renderContent();
+    $('content-form').textContent='Загрузка…';
+    fetch('/'+page).then(function(r) { if(!r.ok) throw Error(); return r.text(); }).then(function(html) { documents[page]=new DOMParser().parseFromString(html,'text/html'); renderContent(); }).catch(function () { $('content-form').textContent='Не удалось загрузить страницу.'; });
+  });
+  fetch('/api/content').then(function(r) { if (!r.ok) throw Error(); return r.json(); }).then(function(data) { content=data; contentReady=true; if (page !== 'events' && documents[page]) renderContent(); }).catch(function () { $('saved').textContent='Не удалось загрузить содержимое сайта. Обновите страницу.'; });
   var TEXT = ['title', 'status', 'date', 'time', 'city', 'venue', 'short', 'description', 'ticketUrl', 'cover', 'id'];
   $('logout').addEventListener('click', function () { fetch('/api/logout', {method:'POST'}).then(function () { location.href = '/admin'; }); });
   var MAP = { а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'y',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'ts',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya' };
@@ -155,6 +222,12 @@
     $('saved').textContent = 'Событие удалено. Нажмите «Сохранить на сайте».';
   });
   $('download').addEventListener('click', function () {
+    if (page !== 'events') {
+      if (!contentReady) { $('saved').textContent='Содержимое ещё не загружено. Обновите страницу и попробуйте снова.'; return; }
+      $('download').disabled=true; $('saved').textContent='Сохраняю…';
+      fetch('/api/content', {method:'PUT', headers:{'content-type':'application/json'}, body:JSON.stringify(content)}).then(function(r) { if(!r.ok) throw Error(); $('saved').textContent='Изменения сохранены на сайте.'; }).catch(function() { $('saved').textContent='Не удалось сохранить изменения.'; }).finally(function() { $('download').disabled=false; });
+      return;
+    }
     var ids = {};
     events.forEach(function (ev, i) { var b = ev.id || 'event-' + (i + 1), id = b, n = 2; while (ids[id]) { id = b + '-' + n++; } ids[id] = 1; ev.id = id; });
     $('download').disabled = true; $('saved').textContent = 'Сохраняю…';
