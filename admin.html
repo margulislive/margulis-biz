@@ -26,6 +26,14 @@
   .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .note { background: var(--surface); border-radius: 20px; padding: 18px 22px; color: var(--muted); font-size: 15px; }
   .note b { color: var(--text); }
+  .photo-row { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:10px; border:1px solid var(--line); border-radius:16px; }
+  .photo-row.is-dragging { opacity:.45; }
+  .photo-row.is-target { outline:2px solid var(--accent); }
+  .photo-handle { font:inherit; font-size:24px; line-height:1; color:var(--muted); background:transparent; border:0; padding:10px; cursor:grab; touch-action:none; }
+  .photo-handle:active { cursor:grabbing; }
+  .photo-order { display:flex; gap:6px; }
+  .photo-order button { font:inherit; color:var(--text); background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:8px 12px; cursor:pointer; }
+  .photo-order button:disabled { opacity:.3; cursor:default; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -48,8 +56,8 @@
     <b>Как это работает.</b> Выберите раздел, внесите изменения и нажмите «Сохранить на сайте». Для фотографий используйте JPEG, PNG или WebP до 10 МБ.
   </div>
   <div class="bar" style="margin-top:24px" id="tabs">
-    <button class="btn btn--light" type="button" data-page="events">События</button>
-    <button class="btn btn--ghost" type="button" data-page="index.html">Главная страница</button>
+    <button class="btn btn--light" type="button" data-page="index.html">Главная страница</button>
+    <button class="btn btn--ghost" type="button" data-page="events">События</button>
     <button class="btn btn--ghost" type="button" data-page="faq.html">Вопросы и ответы</button>
     <button class="btn btn--ghost" type="button" data-page="policy.html">Политика</button>
     <button class="btn btn--ghost" type="button" data-page="event.html">Страница события</button>
@@ -63,8 +71,8 @@
     <div class="f"><label for="account-repeat">Повторите новый пароль</label><input id="account-repeat" type="password" autocomplete="new-password"></div>
     <button class="btn btn--accent" type="submit">Сохранить настройки входа</button><span class="hint" id="account-status" role="status"></span>
   </form>
-  <div id="content-editor" class="adm" hidden><div class="adm__list" id="content-nav"></div><div class="adm__form" id="content-form"></div></div>
-  <div class="adm" id="events-editor">
+  <div id="content-editor" class="adm"><div class="adm__list" id="content-nav"></div><div class="adm__form" id="content-form">Загрузка содержимого…</div></div>
+  <div class="adm" id="events-editor" hidden>
     <div class="adm__list">
       <div id="list" class="stack" style="gap: 8px"></div>
       <button class="btn btn--light" id="add" type="button">+ Новое событие</button>
@@ -116,7 +124,7 @@
   var events = JSON.parse(JSON.stringify(window.EVENTS || []));
   var current = 0;
   var $ = function (id) { return document.getElementById(id); };
-  var page = 'events', content = {}, contentReady = false, documents = {}, selectedGroup = '', invalidLinks = {};
+  var page = 'index.html', content = {}, contentReady = false, documents = {}, selectedGroup = '', invalidLinks = {};
   var pendingUploads = 0, galleryJobs = [], galleryNotice = '';
   var labels = {top:'Первый экран и фотография',events:'Афиша',club:'О клубе',for:'Для кого',community:'JERA',faq:'Частые вопросы'};
   function socialHost(value) { try { var u=new URL(value); return u.protocol==='https:' && /^(?:www\.)?(?:jera\.club|t\.me|wa\.me|instagram\.com|facebook\.com)$/.test(u.hostname) ? u.hostname.replace(/^www\./,'') : ''; } catch (_) { return ''; } }
@@ -143,6 +151,13 @@
     if (file.size > 10 * 1024 * 1024) return Promise.reject(Error('Файл больше 10 МБ. Выберите фотографию меньшего размера.'));
     return fetch('/api/upload', {method:'POST', headers:{'content-type':'application/octet-stream'}, body:file}).then(function (r) { return r.json().then(function (v) { if (!r.ok) throw Error(v.error || 'Не удалось загрузить'); return v.url; }); });
   }
+  function movePhoto(from, to) {
+    var photos=content.heroPhotos || [];
+    if (from===to || from<0 || to<0 || from>=photos.length || to>=photos.length) return;
+    photos.splice(to,0,photos.splice(from,1)[0]);
+    galleryNotice='Порядок фотографий изменён. Нажмите «Сохранить изменения».';
+    renderContent(); saveFeedback(galleryNotice);
+  }
   $('cover-upload').addEventListener('change', function () {
     var input = this, event = events[current], file = input.files[0]; if (!event || !file) return;
     pendingUploads++; input.disabled=true; saveFeedback('Загружаю обложку…');
@@ -158,10 +173,20 @@
     if (page === 'index.html' && selectedGroup === labels.top) {
       var gallery=document.createElement('div'); gallery.className='f';
       var galleryLabel=document.createElement('label'); galleryLabel.textContent='Фотографии событий на первом экране'; gallery.appendChild(galleryLabel);
-      var info=document.createElement('span'); info.className='hint'; info.textContent='Несколько фотографий будут сменять друг друга. Сохраните изменения после загрузки.'; gallery.appendChild(info);
+      var info=document.createElement('span'); info.className='hint'; info.textContent='Перетаскивайте фотографии за точки или используйте стрелки. На сайте они сменяются в указанном порядке.'; gallery.appendChild(info);
       (content.heroPhotos || []).forEach(function (url, index) {
-        var row=document.createElement('div'); row.className='bar';
+        var row=document.createElement('div'); row.className='photo-row'; row.dataset.photoIndex=index;
+        var handle=document.createElement('button'); handle.type='button'; handle.className='photo-handle'; handle.textContent='⋮⋮'; handle.setAttribute('aria-label','Перетащить фото '+(index+1)); handle.title='Перетащите, чтобы изменить порядок';
+        handle.addEventListener('pointerdown',function(e) {
+          if (e.button!==0 || pendingUploads) return; e.preventDefault(); handle.setPointerCapture(e.pointerId); row.classList.add('is-dragging'); var targetIndex=index;
+          function over(ev) { var node=document.elementFromPoint(ev.clientX,ev.clientY); var target=node && node.closest('.photo-row'); gallery.querySelectorAll('.photo-row').forEach(function(x) { x.classList.toggle('is-target',x===target && target!==row); }); if(target) targetIndex=Number(target.dataset.photoIndex); }
+          function finish(ev) { handle.removeEventListener('pointermove',over); handle.removeEventListener('pointerup',finish); handle.removeEventListener('pointercancel',cancel); row.classList.remove('is-dragging'); gallery.querySelectorAll('.photo-row').forEach(function(x) { x.classList.remove('is-target'); }); movePhoto(index,targetIndex); }
+          function cancel() { handle.removeEventListener('pointermove',over); handle.removeEventListener('pointerup',finish); handle.removeEventListener('pointercancel',cancel); row.classList.remove('is-dragging'); gallery.querySelectorAll('.photo-row').forEach(function(x) { x.classList.remove('is-target'); }); }
+          handle.addEventListener('pointermove',over); handle.addEventListener('pointerup',finish); handle.addEventListener('pointercancel',cancel);
+        }); row.appendChild(handle);
         var preview=document.createElement('img'); preview.src=url; preview.alt='Фото события'; preview.style.cssText='width:100px;height:65px;object-fit:cover;border-radius:8px'; row.appendChild(preview);
+        var order=document.createElement('div'); order.className='photo-order';
+        [['↑',index-1,'Переместить фото выше'],['↓',index+1,'Переместить фото ниже']].forEach(function(spec) { var button=document.createElement('button'); button.type='button'; button.textContent=spec[0]; button.setAttribute('aria-label',spec[2]); button.disabled=spec[1]<0 || spec[1]>=content.heroPhotos.length || pendingUploads>0; button.onclick=function() { movePhoto(index,spec[1]); }; order.appendChild(button); }); row.appendChild(order);
         var remove=document.createElement('button'); remove.type='button'; remove.className='btn btn--ghost'; remove.textContent='Убрать фото'; remove.onclick=function () { content.heroPhotos.splice(index,1); galleryNotice='Фото убрано. Нажмите «Сохранить изменения».'; renderContent(); saveFeedback(galleryNotice); }; row.appendChild(remove); gallery.appendChild(row);
       });
       galleryJobs.forEach(function (job) { var line=document.createElement('span'); line.className='hint'; line.textContent=job.name+' — '+job.message; gallery.appendChild(line); });
