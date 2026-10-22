@@ -88,7 +88,8 @@
           '<a class="btn btn--light" href="' + SITE.telegram + '" target="_blank" rel="noopener">Подписаться в Telegram</a></div>';
       } else {
         list.innerHTML = '<div class="cards">' + events.map(function (ev) {
-          return '<a class="card reveal" href="' + eventUrl(ev) + '">' +
+          /* Карточки приходят асинхронно: не даём анимации скрывать их после повторного рендера. */
+          return '<a class="card" href="' + eventUrl(ev) + '">' +
             '<div class="card__cover">' + cover(ev) + (ev.demo ? '<span class="badge">Пример</span>' : '') + '</div>' +
             '<div class="card__body"><span class="eyebrow">' + esc(meta(ev, true)) + '</span>' +
             '<span class="card__title">' + esc(ev.title) + '</span>' +
@@ -109,8 +110,6 @@
         next.querySelector('.next__meta').textContent = 'Новые события скоро появятся';
       }
     }
-    /* Карточки добавляются также после ответа API; подключаем анимацию к новым элементам. */
-    reveal();
   }
 
   /* Страница события */
